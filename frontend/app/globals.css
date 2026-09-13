@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  /* A layered, off-center radial wash toward the stage — warm at the top where
+     the stage glows, cooling into deep teal-black toward the back rows. */
+  background:
+    radial-gradient(1200px 620px at 50% -8%, rgba(230, 180, 92, 0.16), transparent 60%),
+    radial-gradient(900px 700px at 50% 120%, rgba(14, 38, 44, 0.7), transparent 70%),
+    #080d0f;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Frosted glass panel used across the UI. */
+.glass {
+  background: linear-gradient(
+    180deg,
+    rgba(22, 41, 46, 0.55),
+    rgba(12, 20, 23, 0.55)
+  );
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  border: 1px solid rgba(159, 182, 194, 0.14);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-strong {
+  background: linear-gradient(
+    180deg,
+    rgba(28, 50, 56, 0.72),
+    rgba(12, 20, 23, 0.72)
+  );
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  border: 1px solid rgba(230, 180, 92, 0.22);
+  box-shadow:
+    0 14px 50px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* The seat map should never trap page scroll on desktop but can pan on mobile. */
+.seatmap-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Thin brass scrollbar to match the theme. */
+.seatmap-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+.seatmap-wrap::-webkit-scrollbar-thumb {
+  background: rgba(209, 154, 63, 0.4);
+  border-radius: 8px;
+}
+
+.seat-hit {
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.seat-hit:hover {
+  transform: scale(1.18);
+}
+.seat-static {
+  cursor: default;
+}
