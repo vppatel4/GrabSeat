@@ -60,10 +60,10 @@ func InitTracer(ctx context.Context, exporter, instanceID string) (func(context.
 		return func(context.Context) error { return nil }, nil
 	}
 
+	// Keep the span timestamps: the start/end times are exactly what let you
+	// point at a trace and say where the time went during a booking.
 	exp, err := stdouttrace.New(
 		stdouttrace.WithWriter(os.Stdout),
-		// One line per span keeps the container logs readable during a load test.
-		stdouttrace.WithoutTimestamps(),
 	)
 	if err != nil {
 		return nil, err
