@@ -1,0 +1,10 @@
+# Keep line endings sane so files built inside Linux Docker images stay LF,
+# regardless of who clones on Windows. Shell scripts especially break with CRLF.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
+*.mov binary
+*.ico binary
