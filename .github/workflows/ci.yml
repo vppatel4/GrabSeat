@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-unit:
+    name: Backend build, vet & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: backend/go.sum
+      - name: Build
+        working-directory: backend
+        run: go build ./...
+      - name: Vet
+        working-directory: backend
+        run: go vet ./...
+      - name: Unit tests
+        working-directory: backend
+        run: go test -race ./...
+
+  frontend-build:
+    name: Frontend type-check & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+          NEXT_PUBLIC_WS_URL: ws://localhost:8080/ws
+
+  integration:
+    name: Adversarial integration tests (the race-condition suite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare env (short hold TTL so the expiry test runs fast)
+        run: |
+          cp .env.example .env
+          sed -i 's/HOLD_TTL_SECONDS=120/HOLD_TTL_SECONDS=5/' .env
+          sed -i 's/OTEL_TRACES_EXPORTER=stdout/OTEL_TRACES_EXPORTER=none/' .env
+
+      - name: Start stack with two backend instances
+        run: |
+          docker compose -p grabseat up -d --build --scale backend=2 postgres redis backend gateway
+
+      - name: Wait for the gateway to be ready
+        run: |
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:8080/healthz > /dev/null; then
+              echo "ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "stack never became ready"; docker compose -p grabseat logs --tail=80; exit 1
+
+      - name: Run the seven adversarial tests
+        run: |
+          docker run --rm --network=grabseat_default \
+            -e RUN_INTEGRATION=1 \
+            -e BASE_URL=http://gateway:8080 \
+            -e WS_URL=ws://gateway:8080/ws \
+            -v "${{ github.workspace }}/loadtest:/src" -w /src \
+            golang:1.23-alpine go test -v ./...
+
+      - name: Redis resilience test
+        run: |
+          BASE_URL=http://localhost:8080 bash loadtest/redis_resilience.sh
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose -p grabseat logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -p grabseat down -v
