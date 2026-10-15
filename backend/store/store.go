@@ -149,6 +149,19 @@ func (s *Store) Seats(ctx context.Context, eventID int) ([]model.Seat, error) {
 	return seats, rows.Err()
 }
 
+// BookingStats returns the total number of booking rows and the number of
+// distinct seats booked for an event. If the two ever differ, a seat was booked
+// more than once — which the UNIQUE(seat_id) constraint makes impossible. The
+// load test reads this to prove zero double-bookings under concurrency, straight
+// from the durable source of truth.
+func (s *Store) BookingStats(ctx context.Context, eventID int) (total, distinct int, err error) {
+	err = s.pool.QueryRow(ctx,
+		`SELECT count(*), count(DISTINCT seat_id) FROM bookings WHERE event_id = $1`,
+		eventID,
+	).Scan(&total, &distinct)
+	return total, distinct, err
+}
+
 // PrimaryEvent returns the single seeded event.
 func (s *Store) PrimaryEvent(ctx context.Context) (Event, error) {
 	var e Event

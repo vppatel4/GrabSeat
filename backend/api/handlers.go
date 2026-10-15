@@ -43,6 +43,23 @@ func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	total, distinct, err := s.Store.BookingStats(r.Context(), s.Event.ID)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "could not read booking stats",
+			"code":  "unavailable",
+		})
+		return
+	}
+	// double_bookings is total minus distinct seats; it must always be 0.
+	writeJSON(w, http.StatusOK, map[string]int{
+		"bookings_total":  total,
+		"distinct_seats":  distinct,
+		"double_bookings": total - distinct,
+	})
+}
+
 func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.BuildSnapshot(r.Context())
 	if err != nil {

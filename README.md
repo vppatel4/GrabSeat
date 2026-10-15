@@ -209,6 +209,16 @@ distinct buyer, over a 40-second ramp:
 - latency **avg 11.3 ms, p95 18.5 ms**
 - **0 server errors** across the entire run
 
+**k6 double-booking test** (`loadtest/k6_double_booking.js`) — this one drives the
+full hold→confirm flow: ~50 virtual users stampede a pool of 25 seats, all trying
+to hold *and* confirm at once, then it checks the result against the database:
+
+- **~130,000 concurrent hold+confirm requests** against 25 seats
+- **exactly 25 confirmations succeeded** (one per seat); ~130,500 cleanly rejected
+- the server's own stats afterward: `bookings_total == distinct_seats`, i.e.
+  **0 double-bookings** — asserted in the test's teardown against Postgres
+- **0 server errors**, ~5,020 req/s, p95 15 ms
+
 These are from a local run on Docker Desktop (Windows 11), not estimates. On
 different hardware the absolute numbers will differ; the shape — high throughput,
 low latency, zero double-bookings, zero 500s — is the point.
