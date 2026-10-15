@@ -20,7 +20,7 @@ func TestConcurrencyStress(t *testing.T) {
 
 	const (
 		seatCount = 10
-		workers   = 150 // 15 requests fighting over each of the 10 seats
+		workers   = 220 // 22 requests fighting over each of the 10 seats (well over 200)
 	)
 	seats := availableSeats(t, seatCount)
 
