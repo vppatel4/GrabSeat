@@ -75,3 +75,20 @@ docker run --rm -i --network host -e BASE_URL=http://localhost:8080 \
 
 The summary reports p50/p95 latency and the status breakdown. The `server_errors`
 threshold fails the run if any request ever returns a 500.
+
+## Zero double-bookings, proven by k6 (`k6_double_booking.js`)
+
+This drives the full hold→confirm flow under load and verifies the core guarantee
+against the database. Many virtual users stampede a small pool of seats trying to
+hold *and* confirm at once; `teardown()` then reads `/api/stats` (total bookings vs
+distinct seats booked, straight from Postgres) and fails the run if they differ.
+
+```bash
+docker run --rm -i --network=grabseat_default -e BASE_URL=http://gateway:8080 \
+  -e POOL=25 -e VUS=50 -e DURATION=20s \
+  grafana/k6 run - < loadtest/k6_double_booking.js
+```
+
+A passing run prints `[VERIFY] ... double_bookings=0` and `PASS — zero double
+bookings`, with `bookings_confirmed` equal to the pool size (each seat booked
+exactly once) and tens of thousands of clean rejections from the losers.
