@@ -57,12 +57,11 @@ func (s *Store) RunMigrations(ctx context.Context, schema string) error {
 	return err
 }
 
-// ConfirmBooking is the durable half of the confirm flow. The INSERT ... ON
-// CONFLICT DO NOTHING against the UNIQUE(seat_id) constraint is atomic: the
-// first caller inserts and gets inserted=true; any later caller (a retry, a
-// double-click, or a genuine racing request) conflicts and gets back the
-// session that actually owns the seat. That single query gives us both
-// no-double-booking and idempotency for free.
+// ConfirmBooking writes the booking. The INSERT ... ON CONFLICT DO NOTHING works
+// with the UNIQUE(seat_id) rule: the first caller inserts and gets inserted=true,
+// and any later caller (a retry, a double-click, or another person racing for the
+// same seat) hits the conflict and gets back the session that actually owns the
+// seat. So one query handles both "no double booking" and "safe to retry".
 func (s *Store) ConfirmBooking(ctx context.Context, eventID, seatID int, session string) (inserted bool, owner string, err error) {
 	err = s.pool.QueryRow(ctx,
 		`INSERT INTO bookings (seat_id, event_id, session_id)

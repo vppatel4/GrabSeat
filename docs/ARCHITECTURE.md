@@ -1,155 +1,134 @@
 # Architecture
 
-This document explains *why* GrabSeat is built the way it is. The README covers
-what it does and how to run it; this is the reasoning behind the design decisions.
+This goes a bit deeper into why I made the choices I did. The README covers what
+the app does and how to run it; this is the reasoning.
 
-## The one problem this system exists to solve
+## The one thing this project is about
 
-Everything here is in service of a single guarantee: **one seat, one winner, no
-double-bookings, resolved correctly even when requests arrive at the same
-millisecond — and everyone watching sees the result live.**
+Almost everything here is in service of one thing: when a lot of people go for the
+same seat at once, only one should get it, no seat should ever be booked twice, and
+everyone watching should see the change live.
 
-Most of the interesting complexity is concentrated in that guarantee. The rest of
-the system is deliberately plain so the concurrency story stays legible.
+The rest of the app is kept plain on purpose so that part stays easy to follow.
 
-## Why Redis and Postgres, split by job
+## Why Redis and Postgres instead of just one database
 
-A natural first instinct is "just use the database for everything." You could hold
-seats with a row and a status column, and lock it with a transaction. That works,
-but it puts your hottest, most contended operation — everyone grabbing for the
-same few seats — directly onto your durable database, and it ties the lifetime of
-a temporary hold to a row you now have to clean up.
+The easy option is to use one database for everything: a seats table with a status
+column, and a transaction or row lock to stop two people grabbing the same seat.
+That works, but it means your busiest, most fought-over operation runs straight
+against the database, and you also have to clean up holds that nobody finished.
 
-GrabSeat splits the two concerns:
+I split it up:
 
-- **Redis owns the ephemeral state: holds.** A hold is inherently short-lived and
-  self-expiring. Redis's `SET key value NX EX seconds` does the whole thing in one
-  atomic operation: claim the seat only if unclaimed, and forget the claim
-  automatically after the TTL. There's no cleanup job, no cron, no "sweep for
-  abandoned holds" — a crashed or distracted client's hold evaporates on its own.
-- **Postgres owns the permanent state: bookings.** A confirmed booking must be
-  durable and must never be duplicated. A `UNIQUE(seat_id)` constraint on the
-  bookings table enforces that at the storage layer, independent of any
-  application logic.
+- **Redis holds the temporary stuff (the holds).** A hold is short-lived and
+  should expire on its own. Redis's `SET key value NX EX seconds` does both in one
+  command: grab the seat only if it's free, and forget it after a timeout. No
+  cleanup job, no cron. If someone starts a hold and closes their laptop, the hold
+  just disappears when the timer runs out.
+- **Postgres holds the permanent stuff (the bookings).** A booking has to survive a
+  restart and must never be duplicated. A `UNIQUE(seat_id)` on the bookings table
+  takes care of that no matter what the code does.
 
-The payoff is that the high-frequency contended path (holds) runs against an
-in-memory store built for exactly that, while the thing that must survive a
-restart (bookings) lives in a database with a hard constraint protecting it. The
-two are kept deliberately separate — Redis never stores a booking, Postgres never
-arbitrates a live hold.
+So the hot, temporary path runs on Redis, which is built for it, and the thing that
+has to be correct forever lives in Postgres with a rule protecting it. Redis never
+stores a booking, and Postgres never decides a live hold.
 
-## Why an atomic Redis command instead of a database lock
+## Why one Redis command instead of a database lock
 
-The heart of the race is this: two requests for the same seat, effectively
-simultaneous. `SET hold:42 <session> NX EX 300` is a single command that Redis
-executes atomically. When two of them race, Redis serializes them internally —
-one returns OK, the other returns nil. There is no read-then-write window for a
-race to slip through, because there is no separate read.
+The whole race comes down to two requests for the same seat arriving at basically
+the same time. `SET hold:42 <session> NX EX 300` is a single command, and Redis
+runs commands one at a time, so one request gets it and the other doesn't. There's
+no gap between reading and writing where a second request could sneak in, because
+there's no separate read.
 
-A Postgres row lock or `SELECT ... FOR UPDATE` could also serialize this, but it
-means holding a database transaction open for the duration of contention on your
-most-fought-over rows, and you still need a mechanism to expire abandoned holds.
-The Redis approach makes the winner-selection *and* the auto-expiry a single
-built-in behavior.
+You can do the same thing in Postgres with a row lock or `SELECT ... FOR UPDATE`,
+but then you're holding a database transaction open on your most contended rows,
+and you still have to build something to expire old holds. Redis gives me the
+pick-a-winner behavior and the auto-expiry in one step.
 
-The hold is actually done as a tiny Lua script (`locking/locking.go`) that also
-checks a "booked" marker first, so "is it already sold?" and "grab it" happen in
-one atomic step with no gap between them.
+In the code the hold is a small Lua script (`locking/locking.go`) that also checks
+a "booked" marker first, so "is it already sold?" and "grab it" happen together
+with no gap in between.
 
-## Why WebSockets instead of polling or SSE
+## Why WebSockets instead of polling
 
-The product feeling that matters is: you grab a seat, and everyone else's screen
-turns that seat amber *now*. Polling adds latency equal to the poll interval and
-wastes requests when nothing changes. Server-Sent Events would work for the
-server-to-client push, but the connection is naturally two-way here (the client
-also needs a clean reconnect-and-resync story), and WebSockets are the simplest
-fit for "push every state change to every viewer immediately."
+The feeling I wanted is: you grab a seat and everyone else's screen updates right
+away. Polling adds a delay equal to how often you poll, and wastes requests when
+nothing changed. WebSockets just push the change the moment it happens.
 
-On connect — and on every reconnect — the server sends a full snapshot before any
-live deltas. Combined with the fact that applying a seat state is idempotent
-(setting a seat to "held" twice is the same as once), a dropped-and-restored
-connection always converges to the truth instead of showing stale state.
+When a browser connects (or reconnects), the server first sends the full seat map.
+Applying a seat change is written so that doing it twice is the same as doing it
+once, so even if a live update and the first snapshot arrive out of order, the
+browser still ends up showing the right thing.
 
-## Why Redis pub/sub instead of in-process broadcast
+## Why Redis pub/sub instead of keeping it in memory
 
-If GrabSeat ran as a single process, it could keep the list of connected clients
-in memory and broadcast to them directly. But then you could only ever run one
-instance — the moment you scale to two, a booking handled by instance A has no way
-to reach a browser connected to instance B.
+If there were only ever one backend, it could just keep the list of connected
+browsers in memory and send updates to them directly. But then I could only ever
+run one backend. The second I run two, a booking made on backend A wouldn't reach
+someone connected to backend B.
 
-Redis pub/sub fixes that. When any instance changes a seat, it publishes the event
-to a Redis channel. Every instance subscribes to that channel, so every instance
-hears about every change and forwards it to *its own* connected browsers. This is
-what makes the design horizontally scalable rather than a single point that holds
-all the connections. The `TestMultiInstanceBroadcast` test proves it: it connects
-clients across two instances and confirms a change on one reaches clients on the
-other.
+Redis pub/sub fixes that. When any backend changes a seat, it publishes the change
+to a Redis channel. Every backend listens to that channel and forwards the change
+to its own browsers. That's what lets me run more than one backend. The
+`TestMultiInstanceBroadcast` test connects clients to two backends and checks a
+change on one shows up on the other.
 
-Hold expiry uses the same idea a slightly different way. Redis keyspace
-notifications fire an event when a hold key hits its TTL. Every instance is
-subscribed, so each one independently frees the seat for its own clients — no
-single "expiry manager," no polling for expired holds.
+Hold expiry works the same way. Redis can fire an event when a key expires, every
+backend listens for it, and each one frees the seat for its own browsers. No
+polling for expired holds.
 
-## Why idempotency matters here specifically
+## Why confirm is safe to call more than once
 
-Confirm is the operation where money would change hands in a real system, and it's
-exactly the operation most likely to be retried: a flaky connection, an impatient
-double-click, client-side retry logic. If confirm weren't idempotent, a retry
-could either error out confusingly or, worse, try to book twice.
+Confirm is the step that matters most, and it's also the one most likely to get
+retried: a flaky connection, an impatient double click, a client retry. If it
+wasn't safe to retry, a retry could error out or, worse, try to book twice.
 
-The confirm path is built so that calling it twice with the same (seat, session)
-has the same result as calling it once. The mechanism is
-`INSERT ... ON CONFLICT (seat_id) DO NOTHING RETURNING session_id`:
+I use `INSERT ... ON CONFLICT (seat_id) DO NOTHING RETURNING session_id`:
 
-- The first confirm inserts the row and learns it inserted.
-- A second confirm conflicts, inserts nothing, and reads back the existing owner.
-  If that owner is the same session, it's a successful idempotent no-op; if it's a
-  different session, that session simply lost the race and gets a clear conflict.
+- The first confirm inserts the row and sees that it inserted.
+- A second confirm hits the conflict, inserts nothing, and reads back who owns the
+  seat. If it's the same person, that's fine, it's just a repeat. If it's someone
+  else, they simply lost and get a clear message.
 
-Because the uniqueness is enforced by the database, this holds even if two confirm
-requests for the same seat run in genuinely parallel transactions.
+Because the uniqueness is enforced by the database, this holds up even if two
+confirms run at the exact same time.
 
-## Graceful degradation when Redis is down
+## What happens when Redis goes down
 
-Redis is on the critical path for holds, so what happens when it's briefly
-unavailable matters. The backend is written to fail cleanly rather than crash or
-corrupt anything:
+Redis is needed for holds, so I made sure a Redis outage fails cleanly instead of
+crashing:
 
-- Hold and confirm requests that can't reach Redis return a clear `503` with a
-  retry hint, not a hang and not a 500.
-- `/healthz` keeps returning 200 (the process is alive), so the container isn't
-  killed and restart-looped during a blip; component health is reported in the
-  body instead.
-- The pub/sub and keyspace subscriptions reconnect on their own when Redis comes
-  back, and the "booked" cache is rehydrated from Postgres so the fast path is
-  correct again.
-- The snapshot always reads *booked* seats from Postgres, so even if Redis were
-  wiped, the UI still shows sold seats correctly.
+- Hold and confirm requests that can't reach Redis return a clear `503` asking the
+  client to retry, not a crash and not a 500.
+- `/healthz` keeps returning 200 (the process is still alive), so the container
+  doesn't get killed and restarted in a loop during a short outage.
+- The pub/sub and expiry listeners reconnect by themselves when Redis comes back,
+  and the "booked" cache is refilled from Postgres.
+- The seat snapshot always reads booked seats from Postgres, so even if Redis lost
+  everything, booked seats still show correctly.
 
-`TestRedisResilience` (the `redis_resilience.sh` script) exercises exactly this:
-stop Redis mid-flight, confirm clean 503s and a still-alive backend, restart
-Redis, confirm recovery.
+The `redis_resilience.sh` test does exactly this: stop Redis mid-run (clean 503s,
+backend still up), start it again, and holds start working again.
 
-## Observability
+## Logging and tracing
 
-A booking attempt is worth being able to trace end to end. Each request gets a
-trace id that appears on every structured log line it produces, and the
-lock-acquisition and confirm code paths are wrapped in OpenTelemetry spans with
-attributes (seat id, session, outcome). With the stdout exporter you can point at
-a single trace and see where the time went — lock acquisition versus the Postgres
-write — which is the concrete thing you'd want when explaining a latency number
-from the load test.
+I wanted to be able to follow one booking all the way through. Every request has a
+trace id that shows up on each log line, and the hold and confirm steps are wrapped
+in OpenTelemetry spans with the seat id, session, and result attached. With the
+stdout exporter I can point at one trace and see where the time went, which is handy
+when explaining a latency number from the load test.
 
-## Data model
+## The data
 
 Three tables (`backend/db/schema.sql`):
 
 - `events` — the show(s).
-- `seats` — every seat, with section / row / number / price and a stable position
-  for rendering. The frontend turns these into the fanned amphitheater geometry.
-- `bookings` — one row per confirmed booking, with `UNIQUE(seat_id)`. This single
-  constraint is the ultimate guarantee against a double-booking.
+- `seats` — every seat with its section, row, number and price. The frontend turns
+  these into the curved seat map.
+- `bookings` — one row per confirmed booking, with `UNIQUE(seat_id)`. That rule is
+  the final thing stopping a double booking.
 
-Redis keys are simple: `hold:<seatId>` (value = session, with a TTL) and
-`booked:<seatId>` (a cache of what's sold, rehydrated from Postgres). Events are
-published on the `seat_events` channel.
+The Redis keys are simple: `hold:<seatId>` (the session holding it, with a timeout)
+and `booked:<seatId>` (a cache of what's sold, refilled from Postgres). Changes go
+out on the `seat_events` channel.
