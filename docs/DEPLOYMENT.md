@@ -1,9 +1,9 @@
 # Deployment
 
-## Local (the supported, zero-signup way)
+## Running it locally
 
 Everything runs in Docker. You need Docker Desktop (or Docker Engine +
-Compose v2) and nothing else — no accounts, no cloud services.
+Compose v2), and that's it. No accounts, no cloud services.
 
 ### First run
 
@@ -35,8 +35,8 @@ Open http://localhost:3000.
 | postgres | grabseat-postgres-1 | 5432 | durable bookings |
 | redis | grabseat-redis-1 | 6379 | ephemeral holds + pub/sub |
 
-The backend has no host port on purpose — the gateway is the single front door,
-which is what lets you run more than one backend instance.
+The backend has no host port on purpose. The gateway is the only way in, which is
+what lets you run more than one backend.
 
 ### Everyday commands
 
@@ -64,9 +64,9 @@ If a port clashes with something already running on your machine, edit the port 
 
 ### Running the tests
 
-See [../loadtest/README.md](../loadtest/README.md) for the full adversarial suite
-(concurrency, idempotency, expiry boundary, reconnect, rate limiting, Redis
-resilience, multi-instance broadcast) and the k6 load test.
+See [../loadtest/README.md](../loadtest/README.md) for the tests (concurrency,
+retries, expiry, reconnect, rate limiting, Redis going down, updates across two
+backends) and the k6 load test.
 
 ---
 

@@ -1,8 +1,8 @@
-# Load & correctness tests
+# Tests
 
-These are the adversarial tests from the project's hardest-test-cases list. They
-run against the live stack over real HTTP and WebSocket connections, so they
-cover the gateway and (when scaled) multiple backend instances too.
+These are the tests for the tricky cases. They run against the running app over
+real HTTP and WebSocket connections, so they also go through the gateway and, when
+you scale it, more than one backend.
 
 Start the stack first:
 
