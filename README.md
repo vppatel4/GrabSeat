@@ -195,12 +195,12 @@ the hold-expiry boundary, WebSocket reconnect resync, rate-limit isolation, Redi
 failure and recovery, and cross-instance broadcast. How to run each is in
 [loadtest/README.md](loadtest/README.md).
 
-**Concurrency stress test** (`TestConcurrencyStress`) — 150 requests stampede 10
+**Concurrency stress test** (`TestConcurrencyStress`) — 220 requests stampede 10
 seats at once:
 
-- 10 holds succeed, 140 get a clean rejection, **0 double-bookings**
+- 10 holds succeed, 210 get a clean rejection, **0 double-bookings**
 - every winner then confirms; the durable record shows exactly 10 bookings
-- hold latency: **p50 ≈ 72 ms, p95 ≈ 81 ms**
+- hold latency: **p50 ≈ 67 ms, p95 ≈ 78 ms**
 
 **k6 load test** (`loadtest/stress_test.js`) — 80 concurrent virtual users, each a
 distinct buyer, over a 40-second ramp:
