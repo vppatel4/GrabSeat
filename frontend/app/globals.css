@@ -64,6 +64,10 @@ body {
 .seat-hit {
   cursor: pointer;
   transition: transform 0.12s ease;
+  /* Scale each seat around its own centre. Without this an SVG <g> scales from
+     the svg origin, so the seat slides out from under the pointer on hover. */
+  transform-box: fill-box;
+  transform-origin: center;
 }
 .seat-hit:hover {
   transform: scale(1.18);

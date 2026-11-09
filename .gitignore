@@ -2,8 +2,8 @@
 .env
 *.env.local
 
-# Private interview-prep notes — never published
-EXPLANATION.md
+# My private notes and demo working files — never published
+private/
 
 # Go
 backend/bin/
@@ -34,6 +34,7 @@ Thumbs.db
 # Docker
 *.pid
 
-# Demo assets that are large / regenerated
+# Demo assets that are large / regenerated (except the one demo video the README links to)
 docs/media/*.mov
 docs/media/*.mp4
+!docs/media/demo.mp4
