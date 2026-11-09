@@ -15,6 +15,16 @@ and that's enough to pick seats. If you open a second tab, that's a second
 "person", so you can race yourself for the same seat and watch one tab win. You
 only need Docker to run it.
 
+## Demo
+
+[![Watch the GrabSeat demo](docs/media/demo-poster.jpg)](docs/media/demo.mp4)
+
+A 3-minute walkthrough with voice-over and subtitles ([demo.mp4](docs/media/demo.mp4)).
+Two browser tabs act as two buyers: one holds a seat and books it, then both
+click the same seat at the same moment and only one gets it, then a hold runs out
+and the seat opens up again in both tabs. It ends with the stats endpoint showing
+zero double bookings.
+
 ![GrabSeat seat map](docs/media/preview.svg)
 
 This is the seat map. Grey seats are open, gold is the seat you're holding, amber
