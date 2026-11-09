@@ -17,9 +17,9 @@ only need Docker to run it.
 
 ## Demo
 
-[![Watch the GrabSeat demo](docs/media/demo-poster.jpg)](docs/media/demo.mp4)
+https://github.com/user-attachments/assets/cef3b0c0-009c-47d6-a32d-2199893d85a8
 
-A 3-minute walkthrough with voice-over and subtitles ([demo.mp4](docs/media/demo.mp4)).
+A 3-minute walkthrough with voice-over and subtitles (or [download demo.mp4](docs/media/demo.mp4)).
 Two browser tabs act as two buyers: one holds a seat and books it, then both
 click the same seat at the same moment and only one gets it, then a hold runs out
 and the seat opens up again in both tabs. It ends with the stats endpoint showing
