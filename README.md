@@ -17,13 +17,13 @@ only need Docker to run it.
 
 ## Demo
 
-https://github.com/user-attachments/assets/cef3b0c0-009c-47d6-a32d-2199893d85a8
+https://github.com/user-attachments/assets/fa9d9b24-4716-4db2-abdb-4e1aa8568069
 
-A 3-minute walkthrough with voice-over and subtitles (or [download demo.mp4](docs/media/demo.mp4)).
-Two browser tabs act as two buyers: one holds a seat and books it, then both
-click the same seat at the same moment and only one gets it, then a hold runs out
-and the seat opens up again in both tabs. It ends with the stats endpoint showing
-zero double bookings.
+A quick walkthrough with the app open in two Chrome windows, one per buyer
+([download demo.mp4](docs/media/demo.mp4)). One window holds a seat and books it,
+then both windows click the same seat at the same moment and only one gets it,
+then a hold runs out and the seat opens up again in both. It ends with the stats
+endpoint showing zero double bookings.
 
 ![GrabSeat seat map](docs/media/preview.svg)
 
